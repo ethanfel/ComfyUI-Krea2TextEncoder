@@ -64,6 +64,15 @@ class TextEncodeKrea2:
                 "prompt": ("STRING", {"multiline": True, "dynamicPrompts": True}),
             },
             "optional": {
+                # system_prompt sits just above the image slots.
+                "system_prompt": ("STRING", {
+                    "forceInput": True,
+                    "tooltip": "Optional system-instruction input. Wire a text node to override how the "
+                               "VLM frames the reference + your prompt; leave unconnected to use Krea2's "
+                               "trained descriptor (in-distribution). Use an instruct/edit-style "
+                               "instruction (see README) to fuse the prompt with the image. The node "
+                               "adds the chat-template scaffolding; provide just the instruction text.",
+                }),
                 # image1/mask1 are the seed pair; the web extension grows image2/mask2, ... on connect.
                 "image1": ("IMAGE",),
                 "mask1": ("MASK",),
@@ -78,14 +87,6 @@ class TextEncodeKrea2:
                     "tooltip": "Context kept around the mask before cropping, as a fraction of the "
                                "image size added on EACH side. 0 = tight crop to the mask; 0.1 = ~10% "
                                "margin of surroundings. Only applies when a mask is connected.",
-                }),
-                "system_prompt": ("STRING", {
-                    "forceInput": True,
-                    "tooltip": "Optional system-instruction input. Wire a text node to override how the "
-                               "VLM frames the reference + your prompt; leave unconnected to use Krea2's "
-                               "trained descriptor (in-distribution). Use an instruct/edit-style "
-                               "instruction (see README) to fuse the prompt with the image. The node "
-                               "adds the chat-template scaffolding; provide just the instruction text.",
                 }),
             },
         }
