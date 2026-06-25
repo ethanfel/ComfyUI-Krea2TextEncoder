@@ -48,7 +48,28 @@ downstream of this node — that works generically at the sampler level.)
 | `image1…N` | IMAGE | Optional reference images; slots grow as you connect them. |
 | `mask1…N` | MASK | Optional per-image mask; crops `imageN` to the masked bounding box. |
 | `mask_padding` | FLOAT | Context kept around the mask, as a fraction of image size per side (`0` = tight, default). |
+| `system_prompt` | STRING input | Optional. Wire a text node to override the system instruction; unconnected = Krea2's default descriptor. See below. |
 | `vision_megapixels` | FLOAT | Max size before the vision encoder; references are downscaled to this cap, never upscaled (default `1.0`). |
+
+## System prompt (making the prompt interact with the image)
+
+`system_prompt` is a connectable text **input**, not a widget — leave it unconnected to use
+Krea2's trained descriptor (the in-distribution default), or wire a text node to override it.
+Provide just the instruction text; the node wraps it in the chat-template scaffolding.
+
+By default the VLM is only told to *describe* the image, so your prompt and the reference sit
+side by side. To make them **interact** (à la Qwen-Image-Edit), feed an instruct-style
+instruction. The package ships a **`Krea2 System Prompt`** node preloaded with that instruction —
+just drop it and wire its output into `system_prompt` (edit the text if you like). Its default
+text is:
+
+> Describe the key features of the reference image (color, shape, size, texture, objects,
+> background), then explain how the user's instruction should combine with or alter it, and
+> generate a new image meeting the instruction while staying consistent with the reference
+> where appropriate:
+
+This is **experimental / out-of-distribution** — Krea2 was trained on the fixed descriptor, so
+results may drift. A/B it against the default.
 
 Output is a standard `CONDITIONING` for the Krea2 sampler. With no images connected it
 works as a plain Krea2 text encoder.

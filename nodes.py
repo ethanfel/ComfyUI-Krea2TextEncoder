@@ -35,6 +35,25 @@ except Exception:  # pragma: no cover - portability shim
         "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n"
     )
 
+# The user-facing system_prompt field holds just the system *message text*; the node wraps it in
+# the chat-template scaffolding. Pull the default (Krea2's trained descriptor) out of the template
+# so it stays in sync with whatever comfy ships.
+_sys = re.search(r"<\|im_start\|>system\n(.*?)<\|im_end\|>", KREA2_TEMPLATE, re.S)
+KREA2_SYSTEM_DEFAULT = _sys.group(1) if _sys else (
+    "Describe the image by detailing the color, shape, size, texture, quantity, text, "
+    "spatial relationships of the objects and background:"
+)
+
+# Instruct/edit-style framing (à la TextEncodeQwenImageEditPlus): paste this into system_prompt to
+# make the VLM fuse the user's text WITH the reference image instead of just describing it.
+# Out-of-distribution for Krea2's trained descriptor — experimental.
+KREA2_INSTRUCT_SYSTEM = (
+    "Describe the key features of the reference image (color, shape, size, texture, objects, "
+    "background), then explain how the user's instruction should combine with or alter it, and "
+    "generate a new image meeting the instruction while staying consistent with the reference "
+    "where appropriate:"
+)
+
 
 class TextEncodeKrea2:
     @classmethod
@@ -59,6 +78,14 @@ class TextEncodeKrea2:
                     "tooltip": "Context kept around the mask before cropping, as a fraction of the "
                                "image size added on EACH side. 0 = tight crop to the mask; 0.1 = ~10% "
                                "margin of surroundings. Only applies when a mask is connected.",
+                }),
+                "system_prompt": ("STRING", {
+                    "forceInput": True,
+                    "tooltip": "Optional system-instruction input. Wire a text node to override how the "
+                               "VLM frames the reference + your prompt; leave unconnected to use Krea2's "
+                               "trained descriptor (in-distribution). Use an instruct/edit-style "
+                               "instruction (see README) to fuse the prompt with the image. The node "
+                               "adds the chat-template scaffolding; provide just the instruction text.",
                 }),
             },
         }
@@ -116,7 +143,8 @@ class TextEncodeKrea2:
 
         return image[:, y0:y1 + 1, x0:x1 + 1, :]
 
-    def encode(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0, **kwargs):
+    def encode(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0,
+               system_prompt=KREA2_SYSTEM_DEFAULT, **kwargs):
         images = self._collect_indexed(kwargs, "image")
         masks = self._collect_indexed(kwargs, "mask")
         ordered = sorted(images.keys())
@@ -144,15 +172,49 @@ class TextEncodeKrea2:
             else:
                 image_prompt += "<|vision_start|><|image_pad|><|vision_end|>"
 
-        tokens = clip.tokenize(image_prompt + prompt, images=images_vl, llama_template=KREA2_TEMPLATE)
+        system = system_prompt.strip() or KREA2_SYSTEM_DEFAULT
+        template = ("<|im_start|>system\n" + system + "<|im_end|>\n"
+                    "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n")
+        tokens = clip.tokenize(image_prompt + prompt, images=images_vl, llama_template=template)
         conditioning = clip.encode_from_tokens_scheduled(tokens)
         return (conditioning,)
 
 
+class Krea2SystemPrompt:
+    """Generic text node preloaded with the instruct/edit-style system prompt. Wire its
+    output into TextEncodeKrea2's `system_prompt` input to make the prompt fuse with the
+    reference image (experimental / out-of-distribution). Edit the text freely."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": ("STRING", {
+                    "multiline": True, "default": KREA2_INSTRUCT_SYSTEM,
+                    "tooltip": "System instruction for Krea2's VLM. Defaults to an instruct/edit-style "
+                               "framing that fuses your prompt with the reference image. Edit as needed; "
+                               "paste the plain descriptor to fall back to default behavior.",
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("system_prompt",)
+    FUNCTION = "run"
+    CATEGORY = "model/conditioning/krea2"
+    DESCRIPTION = ("Text node preloaded with an instruct-style system prompt for Text Encode (Krea2). "
+                   "Wire its output into the encoder's system_prompt input.")
+
+    def run(self, text):
+        return (text,)
+
+
 NODE_CLASS_MAPPINGS = {
     "TextEncodeKrea2": TextEncodeKrea2,
+    "Krea2SystemPrompt": Krea2SystemPrompt,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "TextEncodeKrea2": "Text Encode (Krea2)",
+    "Krea2SystemPrompt": "Krea2 System Prompt",
 }
