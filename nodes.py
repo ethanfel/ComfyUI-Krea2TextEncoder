@@ -60,13 +60,6 @@ class TextEncodeKrea2:
                                "image size added on EACH side. 0 = tight crop to the mask; 0.1 = ~10% "
                                "margin of surroundings. Only applies when a mask is connected.",
                 }),
-                "vision_strength": ("FLOAT", {
-                    "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "How strongly each reference image influences the result. 1.0 = full; "
-                               "lower fades the image toward neutral gray (which Qwen3-VL reads as ~no "
-                               "signal) so the VLM keys off it less. 0.0 = effectively text-only. For "
-                               "stronger-than-full influence, raise vision_megapixels instead.",
-                }),
             },
         }
 
@@ -123,15 +116,7 @@ class TextEncodeKrea2:
 
         return image[:, y0:y1 + 1, x0:x1 + 1, :]
 
-    @staticmethod
-    def _apply_vision_strength(image, strength):
-        """Lerp the reference toward neutral gray (0.5). Qwen3-VL normalizes with
-        mean/std 0.5, so 0.5 gray -> ~zero vision signal; strength dials influence."""
-        if strength >= 1.0:
-            return image
-        return (0.5 + strength * (image - 0.5)).clamp(0.0, 1.0)
-
-    def encode(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0, vision_strength=1.0, **kwargs):
+    def encode(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0, **kwargs):
         images = self._collect_indexed(kwargs, "image")
         masks = self._collect_indexed(kwargs, "mask")
         ordered = sorted(images.keys())
@@ -152,8 +137,7 @@ class TextEncodeKrea2:
             height = round(samples.shape[2] * scale_by)
 
             s = comfy.utils.common_upscale(samples, width, height, "area", "disabled")
-            vl = self._apply_vision_strength(s.movedim(1, -1)[:, :, :, :3], vision_strength)
-            images_vl.append(vl)
+            images_vl.append(s.movedim(1, -1)[:, :, :, :3])
 
             if len(ordered) > 1:
                 image_prompt += "Picture {}: <|vision_start|><|image_pad|><|vision_end|>".format(slot + 1)
