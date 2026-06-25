@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-krea2-text-encoder"
 description = "Vision-aware text conditioning for the Krea2 / K2 model. Feeds reference images through the Qwen3-VL-4B vision path with the Krea2 descriptor template; optional per-image mask crops to the masked region. No VAE (Krea2 has no reference-latent pathway). Auto-growing image+mask slots."
-version = "1.0.0"
+version = "1.0.1"
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = []
