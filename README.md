@@ -48,6 +48,7 @@ downstream of this node — that works generically at the sampler level.)
 | `image1…N` | IMAGE | Optional reference images; slots grow as you connect them. |
 | `mask1…N` | MASK | Optional per-image mask; crops `imageN` to the masked bounding box. |
 | `mask_padding` | FLOAT | Context kept around the mask, as a fraction of image size per side (`0` = tight, default). |
+| `vision_position` | CHOICE | Put the image tokens `before prompt` (default) or `after prompt` in the user turn. |
 | `vision_megapixels` | FLOAT | Max size before the vision encoder; references are downscaled to this cap, never upscaled (default `1.0`). |
 
 Output is a standard `CONDITIONING` for the Krea2 sampler. With no images connected it

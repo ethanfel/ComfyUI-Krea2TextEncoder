@@ -60,6 +60,12 @@ class TextEncodeKrea2:
                                "image size added on EACH side. 0 = tight crop to the mask; 0.1 = ~10% "
                                "margin of surroundings. Only applies when a mask is connected.",
                 }),
+                "vision_position": (["before prompt", "after prompt"], {
+                    "default": "before prompt",
+                    "tooltip": "Where the image (vision) tokens go in the user turn relative to your "
+                               "text. 'before prompt' = image then text (default); 'after prompt' = "
+                               "text then image. No effect when no image is connected.",
+                }),
             },
         }
 
@@ -116,7 +122,8 @@ class TextEncodeKrea2:
 
         return image[:, y0:y1 + 1, x0:x1 + 1, :]
 
-    def encode(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0, **kwargs):
+    def encode(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0,
+               vision_position="before prompt", **kwargs):
         images = self._collect_indexed(kwargs, "image")
         masks = self._collect_indexed(kwargs, "mask")
         ordered = sorted(images.keys())
@@ -144,7 +151,12 @@ class TextEncodeKrea2:
             else:
                 image_prompt += "<|vision_start|><|image_pad|><|vision_end|>"
 
-        tokens = clip.tokenize(image_prompt + prompt, images=images_vl, llama_template=KREA2_TEMPLATE)
+        if vision_position == "after prompt":
+            text = prompt + image_prompt
+        else:
+            text = image_prompt + prompt
+
+        tokens = clip.tokenize(text, images=images_vl, llama_template=KREA2_TEMPLATE)
         conditioning = clip.encode_from_tokens_scheduled(tokens)
         return (conditioning,)
 
