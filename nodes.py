@@ -207,6 +207,19 @@ class TextEncodeKrea2:
             )
         return None
 
+    @staticmethod
+    def _quiet_token_progress():
+        """Silence ComfyUI's per-token tqdm bar during generation (it prints one console line
+        per token on consoles that don't honor carriage returns). The UI progress ring, driven
+        by a separate comfy.utils.ProgressBar, still updates. Returns a restore() callable."""
+        try:
+            import comfy.text_encoders.llama as _llama
+            orig = _llama.tqdm
+            _llama.tqdm = lambda it=None, *a, **k: (it if it is not None else orig(*a, **k))
+            return lambda: setattr(_llama, "tqdm", orig)
+        except Exception:
+            return lambda: None
+
     def encode(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0,
                system_prompt=KREA2_SYSTEM_DEFAULT, vision_position="before prompt",
                print_prompt=False, **kwargs):
@@ -303,16 +316,18 @@ class Krea2VLMPreview:
         images_vl, image_prompt = TextEncodeKrea2._prepare_vision(kwargs, vision_megapixels, mask_padding)
         text, template = TextEncodeKrea2._build_text(system_prompt, prompt, image_prompt, vision_position)
         tokens = clip.tokenize(text, images=images_vl, llama_template=template)
+        restore = TextEncodeKrea2._quiet_token_progress()
         try:
             ids = clip.generate(tokens, do_sample=(temperature > 0.0), max_length=max_length,
                                 temperature=max(temperature, 0.01), seed=seed)
-            out = clip.decode(ids)
         except NotImplementedError as exc:
             hint = TextEncodeKrea2._fp8_hint(exc, images_vl)
             if hint is not None:
                 raise hint from exc
             raise
-        return (out,)
+        finally:
+            restore()
+        return (clip.decode(ids),)
 
 
 NODE_CLASS_MAPPINGS = {
