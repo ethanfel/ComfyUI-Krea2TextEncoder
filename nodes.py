@@ -157,8 +157,7 @@ class TextEncodeKrea2:
 
     @classmethod
     def _prepare_vision(cls, kwargs, vision_megapixels, mask_padding):
-        """Crop+resize each connected reference and build the vision-token string.
-        Shared by the encoder and the VLM preview so both feed the model identically."""
+        """Crop+resize each connected reference and build the vision-token string."""
         images = cls._collect_indexed(kwargs, "image")
         masks = cls._collect_indexed(kwargs, "mask")
         ordered = sorted(images.keys())
@@ -206,19 +205,6 @@ class TextEncodeKrea2:
                 "type 'krea2' when using image references. The FP8 encoder works only text-only."
             )
         return None
-
-    @staticmethod
-    def _quiet_token_progress():
-        """Silence ComfyUI's per-token tqdm bar during generation (it prints one console line
-        per token on consoles that don't honor carriage returns). The UI progress ring, driven
-        by a separate comfy.utils.ProgressBar, still updates. Returns a restore() callable."""
-        try:
-            import comfy.text_encoders.llama as _llama
-            orig = _llama.tqdm
-            _llama.tqdm = lambda it=None, *a, **k: (it if it is not None else orig(*a, **k))
-            return lambda: setattr(_llama, "tqdm", orig)
-        except Exception:
-            return lambda: None
 
     def encode(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0,
                system_prompt=KREA2_SYSTEM_DEFAULT, vision_position="before prompt",
@@ -272,72 +258,12 @@ class Krea2SystemPrompt:
         return (text,)
 
 
-class Krea2VLMPreview:
-    """Runs Krea2's Qwen3-VL encoder GENERATIVELY on the same image+prompt the encoder feeds,
-    returning the model's text output — a proxy for what the VLM 'sees'. Needs the encoder's
-    lm_head in the weights; use a bf16/fp16 encoder for image inputs (FP8 vision is unsupported)."""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "clip": ("CLIP",),
-                "prompt": ("STRING", {"multiline": True, "dynamicPrompts": True}),
-            },
-            "optional": {
-                "system_prompt": ("STRING", {
-                    "forceInput": True,
-                    "tooltip": "Same as the encoder's system_prompt input; unconnected = Krea2 descriptor.",
-                }),
-                "image1": ("IMAGE",),
-                "mask1": ("MASK",),
-                "vision_megapixels": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 8.0, "step": 0.1}),
-                "mask_padding": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.02}),
-                "vision_position": (["before prompt", "after prompt"], {"default": "before prompt"}),
-                "max_length": ("INT", {"default": 256, "min": 1, "max": 8192,
-                                       "tooltip": "Max number of tokens to generate."}),
-                "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.01,
-                                          "tooltip": "0 = greedy/deterministic."}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
-            },
-        }
-
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("vlm_text",)
-    FUNCTION = "preview"
-    CATEGORY = "model/conditioning/krea2"
-    DESCRIPTION = ("Generate text from Krea2's Qwen3-VL encoder on the same image+prompt the encoder "
-                   "sends, to inspect how the VLM reads your reference. Needs lm_head weights; use a "
-                   "bf16 encoder for image inputs.")
-
-    def preview(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0,
-                system_prompt=KREA2_SYSTEM_DEFAULT, vision_position="before prompt",
-                max_length=256, temperature=0.7, seed=0, **kwargs):
-        images_vl, image_prompt = TextEncodeKrea2._prepare_vision(kwargs, vision_megapixels, mask_padding)
-        text, template = TextEncodeKrea2._build_text(system_prompt, prompt, image_prompt, vision_position)
-        tokens = clip.tokenize(text, images=images_vl, llama_template=template)
-        restore = TextEncodeKrea2._quiet_token_progress()
-        try:
-            ids = clip.generate(tokens, do_sample=(temperature > 0.0), max_length=max_length,
-                                temperature=max(temperature, 0.01), seed=seed)
-        except NotImplementedError as exc:
-            hint = TextEncodeKrea2._fp8_hint(exc, images_vl)
-            if hint is not None:
-                raise hint from exc
-            raise
-        finally:
-            restore()
-        return (clip.decode(ids),)
-
-
 NODE_CLASS_MAPPINGS = {
     "TextEncodeKrea2": TextEncodeKrea2,
     "Krea2SystemPrompt": Krea2SystemPrompt,
-    "Krea2VLMPreview": Krea2VLMPreview,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "TextEncodeKrea2": "Text Encode (Krea2)",
     "Krea2SystemPrompt": "Krea2 System Prompt",
-    "Krea2VLMPreview": "Krea2 VLM Preview",
 }

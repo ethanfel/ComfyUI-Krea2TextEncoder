@@ -3,7 +3,7 @@ import { app } from "../../scripts/app.js";
 // Auto-growing reference slots for "Text Encode (Krea2)": each reference is an
 // (imageN, maskN) pair. Keep exactly one empty trailing pair, appending a fresh
 // pair whenever the last one gets connected.
-const NODE_NAMES = new Set(["TextEncodeKrea2", "Krea2VLMPreview"]);
+const NODE_NAMES = new Set(["TextEncodeKrea2"]);
 const IMAGE_RE = /^image(\d+)$/;
 
 function pairNumbers(node) {
