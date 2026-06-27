@@ -49,7 +49,12 @@ downstream of this node — that works generically at the sampler level.)
 | `mask1…N` | MASK | Optional per-image mask; crops `imageN` to the masked bounding box. |
 | `mask_padding` | FLOAT | Context kept around the mask, as a fraction of image size per side (`0` = tight, default). |
 | `system_prompt` | STRING input | Optional. Wire a text node to override the system instruction; unconnected = Krea2's default descriptor. See below. |
+| `vision_position` | CHOICE | Image tokens `before prompt` (default) or `after prompt` in the user turn. |
+| `print_prompt` | BOOLEAN | Print the assembled Qwen3-VL prompt to the ComfyUI console (debug). |
 | `vision_megapixels` | FLOAT | Max size before the vision encoder; references are downscaled to this cap, never upscaled (default `1.0`). |
+
+**Outputs:** `conditioning` (for the Krea2 sampler) and `vlm_prompt` (STRING — the full assembled
+prompt as the Qwen3-VL encoder receives it; wire to a text-preview node to inspect it).
 
 ## System prompt (making the prompt interact with the image)
 

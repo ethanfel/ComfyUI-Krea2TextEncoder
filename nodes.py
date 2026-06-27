@@ -88,10 +88,22 @@ class TextEncodeKrea2:
                                "image size added on EACH side. 0 = tight crop to the mask; 0.1 = ~10% "
                                "margin of surroundings. Only applies when a mask is connected.",
                 }),
+                "vision_position": (["before prompt", "after prompt"], {
+                    "default": "before prompt",
+                    "tooltip": "Where the image (vision) tokens sit in the user turn relative to your "
+                               "text. 'before prompt' = image then text (default); 'after prompt' = text "
+                               "then image. No effect without an image. Experimental.",
+                }),
+                "print_prompt": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Print the full assembled prompt sent to the Qwen3-VL encoder (system "
+                               "instruction + vision placeholders + your text) to the ComfyUI console.",
+                }),
             },
         }
 
-    RETURN_TYPES = ("CONDITIONING",)
+    RETURN_TYPES = ("CONDITIONING", "STRING")
+    RETURN_NAMES = ("conditioning", "vlm_prompt")
     FUNCTION = "encode"
     CATEGORY = "model/conditioning/krea2"
     DESCRIPTION = ("Krea2 (K2) text conditioning with optional vision prompting. Reference images are "
@@ -145,7 +157,8 @@ class TextEncodeKrea2:
         return image[:, y0:y1 + 1, x0:x1 + 1, :]
 
     def encode(self, clip, prompt, vision_megapixels=1.0, mask_padding=0.0,
-               system_prompt=KREA2_SYSTEM_DEFAULT, **kwargs):
+               system_prompt=KREA2_SYSTEM_DEFAULT, vision_position="before prompt",
+               print_prompt=False, **kwargs):
         images = self._collect_indexed(kwargs, "image")
         masks = self._collect_indexed(kwargs, "mask")
         ordered = sorted(images.keys())
@@ -176,7 +189,17 @@ class TextEncodeKrea2:
         system = system_prompt.strip() or KREA2_SYSTEM_DEFAULT
         template = ("<|im_start|>system\n" + system + "<|im_end|>\n"
                     "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n")
-        tokens = clip.tokenize(image_prompt + prompt, images=images_vl, llama_template=template)
+        text = (prompt + image_prompt) if vision_position == "after prompt" else (image_prompt + prompt)
+        # literal replace (not .format): safe with braces in the text/system prompt.
+        assembled = template.replace("{}", text, 1)
+
+        if print_prompt:
+            print("\n========== Text Encode (Krea2) -> Qwen3-VL prompt ==========")
+            print(assembled)
+            print("---- references: {} ----".format(len(images_vl)))
+            print("===========================================================\n")
+
+        tokens = clip.tokenize(text, images=images_vl, llama_template=template)
         try:
             conditioning = clip.encode_from_tokens_scheduled(tokens)
         except NotImplementedError as exc:
@@ -193,7 +216,7 @@ class TextEncodeKrea2:
                     "text-only prompts."
                 ) from exc
             raise
-        return (conditioning,)
+        return (conditioning, assembled)
 
 
 class Krea2SystemPrompt:
